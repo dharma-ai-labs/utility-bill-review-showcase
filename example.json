@@ -1,0 +1,15 @@
+{
+  "account": "synthetic-001",
+  "service_period_start": "2026-01-01",
+  "service_period_end": "2026-01-31",
+  "current_charges": "17.48",
+  "prior_balance": "0.00",
+  "other_charges": "0.00",
+  "total_due": "17.48",
+  "source_references": {
+    "account": { "page": 1, "quote": "SYNTHETIC ACCOUNT" },
+    "service_period": { "page": 1, "quote": "SYNTHETIC PERIOD" },
+    "current_charges": { "page": 1, "quote": "SYNTHETIC CURRENT CHARGES" },
+    "total_due": { "page": 1, "quote": "SYNTHETIC TOTAL DUE" }
+  }
+}
