@@ -1,3 +1,6 @@
+oracle.json
+runs.json
+score-output.json
 __pycache__/
 *.pyc
 .venv/
