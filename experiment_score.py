@@ -36,6 +36,8 @@ def _rows(value: Any, label: str) -> list[dict[str, Any]]:
 
 def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
     expected = _rows(oracle.get("bills"), "oracle.bills")
+    if not expected:
+        raise ValueError("oracle.bills must contain at least one expected bill")
     expected_by_id: dict[str, dict[str, Any]] = {}
     for row in expected:
         bill_id = row.get("bill_id")
@@ -49,6 +51,11 @@ def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"{bill_id}: oracle is missing a scored field")
         if any(field not in refs for field in SOURCE_FIELDS):
             raise ValueError(f"{bill_id}: oracle is missing a source reference")
+        for field in SOURCE_FIELDS:
+            ref = refs[field]
+            if not isinstance(ref, dict) or type(ref.get("page")) is not int or ref["page"] < 1 \
+                    or not isinstance(ref.get("quote"), str) or not ref["quote"].strip():
+                raise ValueError(f"{bill_id}: invalid oracle source reference for {field}")
         expected_by_id[bill_id] = row
 
     results: dict[str, Any] = {}
@@ -84,6 +91,8 @@ def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
         counts = {
             "expected_bills": len(expected_by_id), "returned_bills": len(by_id),
             "missing_bills": len(expected_by_id) - len(by_id),
+            "expected_fields": len(expected_by_id) * len(FIELDS),
+            "expected_source_references": len(expected_by_id) * len(SOURCE_FIELDS),
             "duplicate_rows": duplicate_rows, "unexpected_rows": unexpected_rows,
             "correct_fields": 0, "missing_fields": 0, "incorrect_fields": 0,
             "source_matches": 0, "source_missing": 0, "source_mismatches": 0,

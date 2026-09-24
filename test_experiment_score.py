@@ -35,7 +35,9 @@ class ExperimentScoreTest(unittest.TestCase):
         result = score(oracle(), one_run([candidate()]))["arms"]["python_only"]
         self.assertEqual(result["safe_exports"], 1)
         self.assertEqual(result["correct_fields"], 9)
+        self.assertEqual(result["expected_fields"], 9)
         self.assertEqual(result["source_matches"], 4)
+        self.assertEqual(result["expected_source_references"], 4)
         self.assertEqual(result["unsafe_exports"], 0)
 
     def test_missing_bill_remains_in_denominator(self):
@@ -73,6 +75,14 @@ class ExperimentScoreTest(unittest.TestCase):
             score(truth, one_run([]))
         with self.assertRaises(ValueError):
             score(oracle(), {"runs": [one_run([])["runs"][0]] * 2})
+
+    def test_rejects_empty_oracle_and_invalid_source_key(self):
+        with self.assertRaises(ValueError):
+            score({"bills": []}, one_run([]))
+        truth = oracle()
+        truth["bills"][0]["source_references"]["total_due"] = {"page": 0, "quote": ""}
+        with self.assertRaises(ValueError):
+            score(truth, one_run([]))
 
 
 if __name__ == "__main__":
