@@ -1,6 +1,6 @@
 # Utility Bill Review: Deterministic Checks
 
-This small Python example illustrates what ordinary code can verify after a bill has been extracted into structured fields. It uses only the standard library. It does **not** read a PDF, run OCR, verify that a quoted line appears on a source page, classify an accounting code, or automatically approve/post a bill.
+The structured-field checker illustrates what ordinary code can verify after extraction. A separate experimental runner, `pdf_python_baseline.py`, can read PDFs with local Poppler and Tesseract tools, apply fixed label rules, and emit candidates for the offline three-arm scorer. Neither script independently verifies that OCR quotes are correct, retrieves bills from utility portals, nor approves/posts a bill.
 
 The intended comparison is not "Python versus AI" as a winner-take-all claim. A production workflow may use deterministic parsing for stable formats, a bounded model for ambiguous pages, and independent validation plus human holds before export. The three approaches require a frozen, representative test set before accuracy, cost, or time savings can be claimed.
 
@@ -10,6 +10,15 @@ The intended comparison is not "Python versus AI" as a winner-take-all claim. A 
 python3 utility_bill_checks.py example.json
 python3 -m unittest -v
 ```
+
+For the **experimental Python-only arm**, install `pdfinfo`, `pdftotext`, `pdftoppm`, and `tesseract` locally, then use a private manifest outside this public checkout:
+
+```bash
+python3 pdf_python_baseline.py /private/bills/manifest.json --output /private/results/python-run.json
+python3 experiment_score.py /private/results/oracle.json /private/results/python-run.json
+```
+
+The manifest has `{"bills":[{"bill_id":"synthetic-a","pdf":"bill.pdf"}],"vendor_codes":{"PPL":"ELEC","UGI":"GAS","Capital Region Water":"WATER"}}`. PDF paths resolve relative to the manifest. Vendor codes are fixed policy inputs, not answers copied from the oracle. The runner uses embedded PDF text when available; otherwise it renders each page and runs Tesseract with fixed modes. Each input produces an `exported`, `held`, or `failed` **simulation candidate**. `exported` means its fixed rules found all required fields and no hold, not that a payment or accounting export happened. Extraction failures remain in the denominator. The scorer checks those candidates against an independently reviewed answer key. Keep manifests, PDFs, OCR-derived quotes, run outputs, and the oracle private.
 
 `example.json` is synthetic. The script returns `review_required` even when arithmetic passes. A source reference's presence is checked, but its text and page must be compared to the actual PDF by an independent reviewer or verified extraction process.
 
@@ -27,7 +36,7 @@ This is an educational reference, not a utility-vendor parser, AppFolio integrat
 `experiment_score.py` is an offline scoring tool. It does not extract PDFs, call a model, confirm a source quote, or certify accuracy. Keep the answer key and run outputs private when using customer bills.
 
 1. Freeze the expected bill inventory and have a person independently review each source PDF. Record the nine scored fields, the exact page and quote for four source references, and whether export is allowed or the bill must be held. Do not derive this key from any experiment arm.
-2. Run a **complete** fixed Python extraction/parser and these checks on every bill. An extraction failure stays in the denominator. This repository only publishes the checks; it does not supply that parser or OCR.
+2. Freeze the Python baseline version and fixed vendor-code mapping before the scored run. Run `pdf_python_baseline.py` on every bill. An extraction failure stays in the denominator. Its intentionally narrow label parser is a real but limited baseline, not a vendor-certified parser; tune it only on a separate development set.
 3. Run the standalone model on the same bills with a frozen model, prompt, schema, timeout, and retry policy. Do not run the Python checks inside this arm.
 4. Run the Dharma path on those same bills with a frozen workflow. Record every provider request and human review, including holds, timeouts, and reconciliation. Today's hosted path is model-first; script-first routing and automatic learning are not demonstrated by this repository.
 5. Put each arm's candidate fields and disposition (`exported`, `held`, or `failed`) in one local `runs.json`. Score all arms with `python3 experiment_score.py oracle.json runs.json`. The JSON output reports missing bills, field and source-reference errors, safe and unsafe exports, duplicates, and holds. It labels cost/time inputs as **reported metrics**, not independently verified charges.
