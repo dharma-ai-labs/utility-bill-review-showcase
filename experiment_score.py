@@ -115,7 +115,10 @@ def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
                             f"{arm}/{bill_id}.source_references")
             bill_correct = True
             for field in FIELDS:
-                if field not in fields or fields[field] is None or fields[field] == "":
+                if field not in fields or fields[field] == "":
+                    counts["missing_fields"] += 1
+                    bill_correct = False
+                elif fields[field] is None and truth["fields"][field] is not None:
                     counts["missing_fields"] += 1
                     bill_correct = False
                 elif fields[field] == truth["fields"][field]:
@@ -141,7 +144,7 @@ def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
         results[arm] = {**counts, "reported_metrics": metrics}
     if not seen_arms:
         raise ValueError("at least one run is required")
-    return {"scoring_version": 1, "arms": results}
+    return {"scoring_version": 2, "arms": results}
 
 
 def main() -> None:

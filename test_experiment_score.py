@@ -47,6 +47,33 @@ class ExperimentScoreTest(unittest.TestCase):
         self.assertEqual(result["missing_fields"], 9)
         self.assertEqual(result["source_missing"], 4)
 
+    def test_explicitly_absent_optional_charge_matches_oracle(self):
+        truth = oracle()
+        truth["bills"][0]["fields"]["other_charges"] = None
+        row = candidate()
+        row["fields"]["other_charges"] = None
+        result = score(truth, one_run([row]))["arms"]["python_only"]
+        self.assertEqual(result["correct_fields"], 9)
+        self.assertEqual(result["missing_fields"], 0)
+        self.assertEqual(result["safe_exports"], 1)
+
+    def test_null_when_oracle_has_amount_is_missing(self):
+        row = candidate()
+        row["fields"]["other_charges"] = None
+        result = score(oracle(), one_run([row]))["arms"]["python_only"]
+        self.assertEqual(result["missing_fields"], 1)
+        self.assertEqual(result["safe_exports"], 0)
+        self.assertEqual(result["unsafe_exports"], 1)
+
+    def test_omitted_optional_field_is_not_explicit_absence(self):
+        truth = oracle()
+        truth["bills"][0]["fields"]["other_charges"] = None
+        row = candidate()
+        del row["fields"]["other_charges"]
+        result = score(truth, one_run([row]))["arms"]["python_only"]
+        self.assertEqual(result["missing_fields"], 1)
+        self.assertEqual(result["safe_exports"], 0)
+
     def test_invented_source_or_wrong_category_is_unsafe(self):
         wrong = candidate()
         wrong["fields"]["accounting_code"] = "OTHER"
