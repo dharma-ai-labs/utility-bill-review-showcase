@@ -46,3 +46,23 @@ This is an educational reference, not a utility-vendor parser, AppFolio integrat
 A correct held bill is **not** a safe export. An unexpected or duplicate export is unsafe. A candidate quote that differs from the independent answer key makes an export unsafe even if all amounts match. For private evaluations, hash the frozen oracle, inputs, parser/model/workflow versions, and scored outputs; keep those receipts outside this public repository. The 98–99% aspiration is not an observed result from the small curated sample.
 
 Scorer version 2 distinguishes an omitted field from an explicitly absent value: JSON `null` matches an oracle `null` (for example, no separately printed other charge), while `null` against a known amount is missing. Record the exact scorer version with every result; version 1 incorrectly marked matching `null` fields as missing.
+
+## Unresolved Oracle Evidence
+
+Do not use `null` to mean "not reviewed", infer a printed year, or invent a source quote to satisfy the scorer. Schema-less oracle inputs retain version 2 behavior and output. An oracle that explicitly declares `"schema": "dharma.utility-oracle/v3"` may record unresolved evidence in each bill as reason maps:
+
+```json
+{
+  "unresolved_fields": {
+    "service_period_start": "The year is not independently printed.",
+    "service_period_end": "The year is not independently printed."
+  },
+  "unresolved_source_references": {
+    "service_period_start": "The page does not verify the complete ISO date."
+  }
+}
+```
+
+This is a bill-level fragment, not a complete oracle. Omit these unresolved keys from that bill's `fields` and `source_references`; keep all other required verified values and references. Reasons must be nonempty strings of at most 500 characters using recognized field names. A key cannot assert verified truth and unresolved status simultaneously. `null` still means independently verified absence, not uncertainty.
+
+Version 3 excludes explicitly unresolved truth from the scored-field/reference denominator and reports `unresolved_oracle_fields` and `unresolved_oracle_source_references` separately. Always publish these coverage counts with any accuracy result. An export with otherwise correct known evidence but unresolved truth is `unverifiable_exports`, never a `safe_exports` pass. A known field/reference error or an oracle-required hold remains an unsafe export. Missing bills remain in the bill denominator. Even an all-unresolved oracle cannot certify an export. Preserve the frozen oracle and its reasons before comparison; do not reclassify difficult fields after seeing one arm's output.

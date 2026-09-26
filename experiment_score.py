@@ -34,11 +34,24 @@ def _rows(value: Any, label: str) -> list[dict[str, Any]]:
     return value
 
 
+def _unresolved(value: Any, allowed: tuple[str, ...], label: str) -> dict[str, str]:
+    reasons = _mapping(value, label)
+    if any(key not in allowed or not isinstance(reason, str) or not reason.strip()
+           or len(reason) > 500 for key, reason in reasons.items()):
+        raise ValueError(f"{label} requires recognized fields and bounded nonempty reasons")
+    return reasons
+
+
 def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
+    schema = oracle.get("schema")
+    if schema is not None and schema != "dharma.utility-oracle/v3":
+        raise ValueError("unknown oracle schema")
+    version = 3 if schema is not None else 2
     expected = _rows(oracle.get("bills"), "oracle.bills")
     if not expected:
         raise ValueError("oracle.bills must contain at least one expected bill")
     expected_by_id: dict[str, dict[str, Any]] = {}
+    unresolved_by_id: dict[str, tuple[dict[str, str], dict[str, str]]] = {}
     for row in expected:
         bill_id = row.get("bill_id")
         if not isinstance(bill_id, str) or not bill_id or bill_id in expected_by_id:
@@ -47,16 +60,28 @@ def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"{bill_id}: allowed_disposition must be exported or held")
         fields = _mapping(row.get("fields"), f"{bill_id}.fields")
         refs = _mapping(row.get("source_references"), f"{bill_id}.source_references")
-        if any(field not in fields for field in FIELDS):
+        if version == 2 and ("unresolved_fields" in row or "unresolved_source_references" in row):
+            raise ValueError("unresolved oracle entries require dharma.utility-oracle/v3")
+        unresolved_fields = _unresolved(row.get("unresolved_fields", {}), FIELDS,
+                                        f"{bill_id}.unresolved_fields")
+        unresolved_refs = _unresolved(row.get("unresolved_source_references", {}), SOURCE_FIELDS,
+                                      f"{bill_id}.unresolved_source_references")
+        if any(field in fields for field in unresolved_fields) \
+                or any(field in refs for field in unresolved_refs):
+            raise ValueError(f"{bill_id}: unresolved entries cannot also assert verified truth")
+        if any(field not in fields and field not in unresolved_fields for field in FIELDS):
             raise ValueError(f"{bill_id}: oracle is missing a scored field")
-        if any(field not in refs for field in SOURCE_FIELDS):
+        if any(field not in refs and field not in unresolved_refs for field in SOURCE_FIELDS):
             raise ValueError(f"{bill_id}: oracle is missing a source reference")
         for field in SOURCE_FIELDS:
+            if field in unresolved_refs:
+                continue
             ref = refs[field]
             if not isinstance(ref, dict) or type(ref.get("page")) is not int or ref["page"] < 1 \
                     or not isinstance(ref.get("quote"), str) or not ref["quote"].strip():
                 raise ValueError(f"{bill_id}: invalid oracle source reference for {field}")
         expected_by_id[bill_id] = row
+        unresolved_by_id[bill_id] = (unresolved_fields, unresolved_refs)
 
     results: dict[str, Any] = {}
     seen_arms: set[str] = set()
@@ -91,19 +116,24 @@ def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
         counts = {
             "expected_bills": len(expected_by_id), "returned_bills": len(by_id),
             "missing_bills": len(expected_by_id) - len(by_id),
-            "expected_fields": len(expected_by_id) * len(FIELDS),
-            "expected_source_references": len(expected_by_id) * len(SOURCE_FIELDS),
+            "expected_fields": sum(len(FIELDS) - len(pair[0]) for pair in unresolved_by_id.values()),
+            "expected_source_references": sum(len(SOURCE_FIELDS) - len(pair[1]) for pair in unresolved_by_id.values()),
             "duplicate_rows": duplicate_rows, "unexpected_rows": unexpected_rows,
             "correct_fields": 0, "missing_fields": 0, "incorrect_fields": 0,
             "source_matches": 0, "source_missing": 0, "source_mismatches": 0,
             "safe_exports": 0, "unsafe_exports": unsafe_exports,
             "holds": 0, "failures": 0,
         }
+        if version == 3:
+            counts.update(unresolved_oracle_fields=sum(len(pair[0]) for pair in unresolved_by_id.values()),
+                          unresolved_oracle_source_references=sum(len(pair[1]) for pair in unresolved_by_id.values()),
+                          unverifiable_exports=0)
         for bill_id, truth in expected_by_id.items():
+            unresolved_fields, unresolved_refs = unresolved_by_id[bill_id]
             candidate = by_id.get(bill_id)
             if candidate is None:
-                counts["missing_fields"] += len(FIELDS)
-                counts["source_missing"] += len(SOURCE_FIELDS)
+                counts["missing_fields"] += len(FIELDS) - len(unresolved_fields)
+                counts["source_missing"] += len(SOURCE_FIELDS) - len(unresolved_refs)
                 continue
             disposition = candidate["disposition"]
             if disposition == "held":
@@ -115,6 +145,8 @@ def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
                             f"{arm}/{bill_id}.source_references")
             bill_correct = True
             for field in FIELDS:
+                if field in unresolved_fields:
+                    continue
                 if field not in fields or fields[field] == "":
                     counts["missing_fields"] += 1
                     bill_correct = False
@@ -127,6 +159,8 @@ def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
                     counts["incorrect_fields"] += 1
                     bill_correct = False
             for field in SOURCE_FIELDS:
+                if field in unresolved_refs:
+                    continue
                 if field not in refs:
                     counts["source_missing"] += 1
                     bill_correct = False
@@ -136,15 +170,17 @@ def score(oracle: dict[str, Any], runs: dict[str, Any]) -> dict[str, Any]:
                     counts["source_mismatches"] += 1
                     bill_correct = False
             if disposition == "exported":
-                if bill_correct and truth["allowed_disposition"] == "exported":
-                    counts["safe_exports"] += 1
-                else:
+                if not bill_correct or truth["allowed_disposition"] == "held":
                     counts["unsafe_exports"] += 1
+                elif unresolved_fields or unresolved_refs:
+                    counts["unverifiable_exports"] += 1
+                else:
+                    counts["safe_exports"] += 1
         metrics = _mapping(run.get("metrics", {}), f"{arm}.metrics")
         results[arm] = {**counts, "reported_metrics": metrics}
     if not seen_arms:
         raise ValueError("at least one run is required")
-    return {"scoring_version": 2, "arms": results}
+    return {"scoring_version": version, "arms": results}
 
 
 def main() -> None:
