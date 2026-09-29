@@ -18,6 +18,8 @@ python3 experiment_score.py /private/results/oracle.json /private/results/python
 
 The oracle must be independently reviewed and frozen before scoring. A post hoc synthetic key is a smoke check, not a held-out accuracy measurement. A baseline `exported` disposition is a **simulation candidate**, not an accounting CSV export, payment, or posting. Keep PDFs, account numbers, addresses, OCR quotes, private manifests, model responses, and answer keys out of commits and shared Agent Fabric artifacts.
 
+For a local reviewed CSV, use `python3 reviewed_csv.py <private-review-manifest> <private-python-run> <private-decisions> --output <private-new-csv-path>`. The README defines the decision contract. Require source confirmation against the visible original PDF; a machine quote match or an agent-generated approval is not independent human review. Check the returned held list and inspect the CSV before use. Do not send it to an accounting system or claim import compatibility without separate validation.
+
 ## Source and hold rules
 
 Verify each candidate quote and page against the original PDF. Reconcile monetary fields in cents and check missing values, duplicate bills, service period, and accounting mapping. Preserve an unresolved source as unresolved; never invent a field or quote to pass the scorer. `utility_bill_checks.py` returns `review_required` even when arithmetic passes. A nonzero prior balance requires `prior_balance_requires_review`; nonzero other charges require `other_charges_require_review`. Neither may be silently folded into current charges. A correct hold is not a successful export.

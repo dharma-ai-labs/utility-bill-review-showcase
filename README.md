@@ -24,6 +24,16 @@ The manifest has `{"bills":[{"bill_id":"synthetic-a","pdf":"bill.pdf"}],"vendor_
 
 `example.json` is synthetic. The script returns `review_required` even when arithmetic passes. A source reference's presence is checked, but its text and page must be compared to the actual PDF by an independent reviewer or verified extraction process.
 
+## Reviewed local CSV (experimental)
+
+`reviewed_csv.py` turns hold-free PDF candidates into private CSV rows only after a separate source-confirmation decision. It does not send data to Dharma, AppFolio, or a payment system. Keep the manifest, candidate output, review decisions, and CSV **outside this public checkout**. The review manifest uses the same `bills` and `vendor_codes` as the PDF baseline plus an `allowed_accounting_codes` list. Give every bill one decision with its `bill_id`, matching `input_sha256`, `approved` boolean, `source_checked_against_original` boolean, safe `property_code`, allowed `accounting_code`, reviewer identifier, and timezone-qualified `reviewed_at`. If the selected code differs from the candidate's mapping, supply a nonempty `mapping_change_reason`. Use a distinct output path for each adjustment; existing CSV files are not overwritten.
+
+```bash
+python3 reviewed_csv.py /private/bills/review-manifest.json /private/results/python-run.json /private/reviews/decisions.json --output /private/results/reviewed-rows.csv
+```
+
+The command rechecks the PDF hash, required quotes against extracted page text, field arithmetic, prior/other-charge holds, duplicate documents, and spreadsheet-safe identifiers. A held bill never enters the CSV, even if a review decision says `approved`. Its JSON receipt reports held IDs and reasons without bill contents. The review decision is an attestation, not proof that a person actually inspected the page; an independent human review remains required for customer accounting use. OCR can disagree with the visible PDF even when machine quote matching passes. This CSV is not a certified AppFolio import template.
+
 ## Checks
 
 - Monetary values have at most two fractional digits and reconcile exactly in cents.
