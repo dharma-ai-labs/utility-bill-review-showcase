@@ -4,6 +4,8 @@ The structured-field checker illustrates what ordinary code can verify after ext
 
 The intended comparison is not "Python versus AI" as a winner-take-all claim. A production workflow may use deterministic parsing for stable formats, a bounded model for ambiguous pages, and independent validation plus human holds before export. The three approaches require a frozen, representative test set before accuracy, cost, or time savings can be claimed.
 
+The repository-native [utility-bill-review skill](.agents/skills/utility-bill-review/SKILL.md) gives enrolled coding agents the source, hold, and disclosure rules. Its tracked source is not a signed Agent Fabric release; the installed managed package and knowledge catalog remain authoritative for a connected device.
+
 ## Run
 
 ```bash
@@ -22,6 +24,16 @@ The manifest has `{"bills":[{"bill_id":"synthetic-a","pdf":"bill.pdf"}],"vendor_
 
 `example.json` is synthetic. The script returns `review_required` even when arithmetic passes. A source reference's presence is checked, but its text and page must be compared to the actual PDF by an independent reviewer or verified extraction process.
 
+## Reviewed local CSV (experimental)
+
+`reviewed_csv.py` turns hold-free PDF candidates into private CSV rows only after a separate source-confirmation decision. It does not send data to Dharma, AppFolio, or a payment system. Keep the manifest, candidate output, review decisions, and CSV **outside this public checkout**. The review manifest uses the same `bills` and `vendor_codes` as the PDF baseline plus an `allowed_accounting_codes` list. Give every bill one decision with its `bill_id`, matching `input_sha256`, `approved` boolean, `source_checked_against_original` boolean, safe `property_code`, allowed `accounting_code`, reviewer identifier, and timezone-qualified `reviewed_at`. If the selected code differs from the candidate's mapping, supply a nonempty `mapping_change_reason`. Use a distinct output path for each adjustment; existing CSV files are not overwritten.
+
+```bash
+python3 reviewed_csv.py /private/bills/review-manifest.json /private/results/python-run.json /private/reviews/decisions.json --output /private/results/reviewed-rows.csv
+```
+
+The command rechecks the PDF hash, required quotes against extracted page text, field arithmetic, prior/other-charge holds, duplicate documents, and spreadsheet-safe identifiers. A held bill never enters the CSV, even if a review decision says `approved`. Its JSON receipt reports held IDs and reasons without bill contents. The review decision is an attestation, not proof that a person actually inspected the page; an independent human review remains required for customer accounting use. OCR can disagree with the visible PDF even when machine quote matching passes. This CSV is not a certified AppFolio import template.
+
 ## Checks
 
 - Monetary values have at most two fractional digits and reconcile exactly in cents.
@@ -38,7 +50,7 @@ This is an educational reference, not a utility-vendor parser, AppFolio integrat
 1. Freeze the expected bill inventory and have a person independently review each source PDF. Record the nine scored fields, the exact page and quote for four source references, and whether export is allowed or the bill must be held. Do not derive this key from any experiment arm.
 2. Freeze the Python baseline version and fixed vendor-code mapping before the scored run. Run `pdf_python_baseline.py` on every bill. An extraction failure stays in the denominator. Its intentionally narrow label parser is a real but limited baseline, not a vendor-certified parser; tune it only on a separate development set.
 3. Run the standalone model on the same bills with a frozen model, prompt, schema, timeout, and retry policy. Do not run the Python checks inside this arm.
-4. Run the Dharma path on those same bills with a frozen workflow. Record every provider request and human review, including holds, timeouts, and reconciliation. Today's hosted path is model-first; script-first routing and automatic learning are not demonstrated by this repository.
+4. Run the Dharma path on those same bills with a frozen workflow. Record every provider request and human review, including holds, timeouts, and reconciliation. The isolated staging worker has shown one Python-first unresolved-bill hold before model dispatch; a complete script-to-model-to-human export and automatic learning are not demonstrated by this repository.
 5. Put each arm's candidate fields and disposition (`exported`, `held`, or `failed`) in one local `runs.json`. Score all arms with `python3 experiment_score.py oracle.json runs.json`. The JSON output reports missing bills, field and source-reference errors, safe and unsafe exports, duplicates, and holds. It labels cost/time inputs as **reported metrics**, not independently verified charges.
 
 `oracle.json` has `bills`: each object needs a unique `bill_id`, `allowed_disposition` (`exported` or `held`), `fields` containing `vendor`, `account_suffix`, `service_period_start`, `service_period_end`, `current_charges`, `prior_balance`, `other_charges`, `total_due`, and `accounting_code`, plus `source_references` for `account_suffix`, `service_period_start`, `current_charges`, and `total_due`. Each reference should contain the independently reviewed `page` and `quote`. `runs.json` has `runs`: each object needs one unique `arm` (`python_only`, `llm_only`, or `dharma_hybrid`) and `bills` with `bill_id`, `disposition`, candidate `fields`, and candidate `source_references`. Optional `metrics` can carry actual cost, elapsed time, provider calls, and reviewer minutes, with their measurement source recorded separately.

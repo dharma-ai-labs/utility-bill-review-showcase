@@ -4,3 +4,6 @@ score-output.json
 __pycache__/
 *.pyc
 .venv/
+.dharma/
+.agents/skills/.dharma-managed/
+.agents/skills/dharma-agent-fabric/
